@@ -8,16 +8,19 @@ from utils.network import Forwarder
 from utils.grammar import PathGrammar
 from utils.length_model import PoissonModel
 from utils.viterbi import Viterbi
+import click
+import os
 
+NUM_ITERS = 10000
 
 ### helper function for parallelized Viterbi decoding ##########################
-def decode(queue, log_probs, decoder, index2label):
+def decode(queue, log_probs, decoder, index2label, result_root):
     while not queue.empty():
         try:
             video = queue.get(timeout = 3)
             score, labels, segments = decoder.decode( log_probs[video] )
             # save result
-            with open('results/' + video, 'w') as f:
+            with open('%s/' % result_root + video, 'w') as f:
                 f.write( '### Recognized sequence: ###\n' )
                 f.write( ' '.join( [index2label[s.label] for s in segments] ) + '\n' )
                 f.write( '### Score: ###\n' + str(score) + '\n')
@@ -27,48 +30,59 @@ def decode(queue, log_probs, decoder, index2label):
             pass
 
 
-### read label2index mapping and index2label mapping ###########################
-label2index = dict()
-index2label = dict()
-with open('data/mapping.txt', 'r') as f:
-    content = f.read().split('\n')[0:-1]
-    for line in content:
-        label2index[line.split()[1]] = int(line.split()[0])
-        index2label[int(line.split()[0])] = line.split()[1]
+@click.command()
+@click.argument('data-root', type=str)
+@click.argument('result-root', type=str)
+@click.option('--seed', type=int, default=0)
+def main(data_root, result_root, seed):
+    result_root += "s-%d" % seed
 
-### read test data #############################################################
-with open('data/split1.test', 'r') as f:
-    video_list = f.read().split('\n')[0:-1]
-dataset = Dataset('data', video_list, label2index, shuffle = False)
+    ### read label2index mapping and index2label mapping ###########################
+    label2index = dict()
+    index2label = dict()
+    with open(os.path.join(data_root, 'mapping.txt'), 'r') as f:
+        content = f.read().split('\n')[0:-1]
+        for line in content:
+            label2index[line.split()[1]] = int(line.split()[0])
+            index2label[int(line.split()[0])] = line.split()[1]
 
-# load prior, length model, grammar, and network
-load_iteration = 10000
-log_prior = np.log( np.loadtxt('results/prior.iter-' + str(load_iteration) + '.txt') )
-grammar = PathGrammar('results/grammar.txt', label2index)
-length_model = PoissonModel('results/lengths.iter-' + str(load_iteration) + '.txt', max_length = 2000)
-forwarder = Forwarder(dataset.input_dimension, dataset.n_classes)
-forwarder.load_model('results/network.iter-' + str(load_iteration) + '.net')
+    ### read test data #############################################################
+    #with open('data/split1.test', 'r') as f:
+    with open(os.path.join(data_root, 'split1.test'), 'r') as f:
+        video_list = f.read().split('\n')[0:-1]
+    dataset = Dataset(data_root, video_list, label2index, shuffle = False)
 
-# parallelization
-n_threads = 8
+    # load prior, length model, grammar, and network
+    load_iteration = NUM_ITERS
+    log_prior = np.log( np.loadtxt('%s/prior.iter-' % result_root + str(load_iteration) + '.txt') )
+    grammar = PathGrammar('%s/grammar.txt' % result_root, label2index)
+    length_model = PoissonModel('%s/lengths.iter-' % result_root + str(load_iteration) + '.txt', max_length = 2000)
+    forwarder = Forwarder(dataset.input_dimension, dataset.n_classes)
+    forwarder.load_model('%s/network.iter-' % result_root + str(load_iteration) + '.net')
 
-# Viterbi decoder
-viterbi_decoder = Viterbi(grammar, length_model, frame_sampling = 30, max_hypotheses = np.inf)
-# forward each video
-log_probs = dict()
-queue = mp.Queue()
-for i, data in enumerate(dataset):
-    sequence, _ = data
-    video = list(dataset.features.keys())[i]
-    queue.put(video)
-    log_probs[video] = forwarder.forward(sequence) - log_prior
-    log_probs[video] = log_probs[video] - np.max(log_probs[video])
-# Viterbi decoding
-procs = []
-for i in range(n_threads):
-    p = mp.Process(target = decode, args = (queue, log_probs, viterbi_decoder, index2label) )
-    procs.append(p)
-    p.start()
-for p in procs:
-    p.join()
+    # parallelization
+    n_threads = 4
 
+    # Viterbi decoder
+    viterbi_decoder = Viterbi(grammar, length_model, frame_sampling = 30, max_hypotheses = np.inf)
+    # forward each video
+    log_probs = dict()
+    queue = mp.Queue()
+    for i, data in enumerate(dataset):
+        sequence, _ = data
+        video = list(dataset.features.keys())[i]
+        queue.put(video)
+        log_probs[video] = forwarder.forward(sequence) - log_prior
+        log_probs[video] = log_probs[video] - np.max(log_probs[video])
+    # Viterbi decoding
+    procs = []
+    for i in range(n_threads):
+        p = mp.Process(target = decode, args = (queue, log_probs, viterbi_decoder, index2label, result_root))
+        procs.append(p)
+        p.start()
+    for p in procs:
+        p.join()
+
+
+if __name__ == '__main__':
+    main()

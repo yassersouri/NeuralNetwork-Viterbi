@@ -3,6 +3,7 @@
 import argparse
 import glob
 import re
+import click
 
 
 def recog_file(filename, ground_truth_path):
@@ -30,22 +31,30 @@ def recog_file(filename, ground_truth_path):
 ### arguments ###
 ### --recog_dir: the directory where the recognition files from inferency.py are placed
 ### --ground_truth_dir: the directory where the framelevel ground truth can be found
-parser = argparse.ArgumentParser()
-parser.add_argument('--recog_dir', default='results')
-parser.add_argument('--ground_truth_dir', default='data/groundTruth')
-args = parser.parse_args()
 
-filelist = glob.glob(args.recog_dir + '/P*')
+@click.command()
+@click.argument('data-root', type=str)
+@click.argument('result-root', type=str)
+@click.option('--seed', type=int, default=0)
+def main(data_root, result_root, seed):
+    result_root += "s-%d" % seed
 
-print('Evaluate %d video files...' % len(filelist))
+    ground_truth_dir = "%s/groundTruth" % data_root
+    filelist = glob.glob(result_root + '/P*')
 
-n_frames = 0
-n_errors = 0
-# loop over all recognition files and evaluate the frame error
-for filename in filelist:
-    errors, frames = recog_file(filename, args.ground_truth_dir)
-    n_errors += errors
-    n_frames += frames
+    print('Evaluate %d video files...' % len(filelist))
 
-# print frame accuracy (1.0 - frame error rate)
-print('frame accuracy: %f' % (1.0 - float(n_errors) / n_frames))
+    n_frames = 0
+    n_errors = 0
+    # loop over all recognition files and evaluate the frame error
+    for filename in filelist:
+        errors, frames = recog_file(filename, ground_truth_dir)
+        n_errors += errors
+        n_frames += frames
+
+    # print frame accuracy (1.0 - frame error rate)
+    print('frame accuracy: %f' % (1.0 - float(n_errors) / n_frames))
+
+
+if __name__ == '__main__':
+    main()
