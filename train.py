@@ -4,6 +4,7 @@ import click
 import torch
 import random
 import os
+from tqdm import tqdm
 
 import numpy as np
 from utils.dataset import Dataset
@@ -61,7 +62,7 @@ def main(data_root, result_root, seed):
     learning_rate = 0.01
 
     # train for 10000 iterations
-    for i in range(NUM_ITERS):
+    for i in tqdm(range(NUM_ITERS)):
         sequence, transcript = dataset.get()
         loss = trainer.train(sequence, transcript, batch_size = 512, learning_rate = learning_rate)
         # print some progress information

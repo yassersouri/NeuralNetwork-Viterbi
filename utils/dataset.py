@@ -17,7 +17,8 @@ class Dataset(object):
         # read features for each video
         for video in video_list:
             # video features
-            self.features[video] = np.load(base_path + '/features/' + video + '.npy')
+            # self.features[video] = np.load(base_path + '/features/' + video + '.npy')
+            self.features[video] = base_path + '/features/' + video + '.npy'
             # transcript
             with open(base_path + '/transcripts/' + video + '.txt') as f:
                 self.transcript[video] = [ label2index[line] for line in f.read().split('\n')[0:-1] ]
@@ -26,7 +27,7 @@ class Dataset(object):
         if self.shuffle:
             random.shuffle(self.selectors)
         # set input dimension and number of classes
-        self.input_dimension = list(self.features.values())[0].shape[0]
+        self.input_dimension = np.load(list(self.features.values())[0]).shape[0]
         self.n_classes = len(label2index)
 
     def videos(self):
@@ -47,7 +48,7 @@ class Dataset(object):
         else:
             video = self.selectors[self.idx]
             self.idx += 1
-            return self.features[video], self.transcript[video]
+            return np.load(self.features[video]), self.transcript[video]
 
     def get(self):
         try:
