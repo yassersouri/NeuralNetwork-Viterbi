@@ -7,8 +7,8 @@ import os
 from tqdm import tqdm
 
 import numpy as np
-from utils.dataset import Dataset
-from utils.network import Trainer
+from utils.dataset_didt import Dataset
+from utils.network import Trainer, Forwarder
 from utils.viterbi import Viterbi
 
 
@@ -20,8 +20,7 @@ NUM_ITERS = 10000
 @click.argument('result-root', type=str)
 @click.argument('split', type=int)
 @click.option('--seed', type=int, default=0)
-@click.option('--feat-window-size', type=int, default=21)
-def main(data_root, result_root, split, seed, feat_window_size):
+def main(data_root, result_root, split, seed):
 
     result_root += "-s-%d-%d" % (split, seed)
 
@@ -55,7 +54,7 @@ def main(data_root, result_root, split, seed, feat_window_size):
 
     ### actual nn-viterbi training #################################################
     decoder = Viterbi(None, None, frame_sampling = 30, max_hypotheses = np.inf) # (None, None): transcript-grammar and length-model are set for each training sequence separately, see trainer.train(...)
-    trainer = Trainer(decoder, dataset.input_dimension, dataset.n_classes, buffer_size = len(dataset), buffered_frame_ratio = 25, feat_window_size=feat_window_size)
+    trainer = Trainer(decoder, dataset.input_dimension, dataset.n_classes, buffer_size = len(dataset), buffered_frame_ratio = 25)
     learning_rate = 0.01
 
     # train for 10000 iterations

@@ -18,12 +18,14 @@ def recog_file(filename, ground_truth_path):
         recognized = f.read().split('\n')[5].split() # framelevel recognition is in 6-th line of file
         f.close()
 
+    the_length = min(len(recognized), len(ground_truth))
+
     n_frame_errors = 0
-    for i in range(len(recognized)):
+    for i in range(the_length):
         if not recognized[i] == ground_truth[i]:
             n_frame_errors += 1
 
-    return n_frame_errors, len(recognized)
+    return n_frame_errors, the_length
 
 
 ### MAIN #######################################################################
@@ -35,9 +37,10 @@ def recog_file(filename, ground_truth_path):
 @click.command()
 @click.argument('data-root', type=str)
 @click.argument('result-root', type=str)
+@click.argument('split', type=int)
 @click.option('--seed', type=int, default=0)
-def main(data_root, result_root, seed):
-    result_root += "s-%d" % seed
+def main(data_root, result_root, split, seed):
+    result_root += "-s-%d-%d" % (split, seed)
 
     ground_truth_dir = "%s/groundTruth" % data_root
     filelist = glob.glob(result_root + '/P*')

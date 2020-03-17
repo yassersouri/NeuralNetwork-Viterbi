@@ -36,7 +36,8 @@ def decode(queue, log_probs, decoder, index2label, result_root):
 @click.argument('split', type=int)
 @click.option('--seed', type=int, default=0)
 @click.option('--feat-window-size', type=int, default=21)
-def main(data_root, result_root, split, seed, feat_window_size):
+@click.option('--no-prior', type=bool, default=False)
+def main(data_root, result_root, split, seed, feat_window_size, no_prior):
     result_root += "-s-%d-%d" % (split, seed)
 
     ### read label2index mapping and index2label mapping ###########################

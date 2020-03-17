@@ -3,7 +3,7 @@
 import numpy as np
 import multiprocessing as mp
 import queue
-from utils.dataset import Dataset
+from utils.dataset_didt import Dataset
 from utils.network import Forwarder
 from utils.grammar import PathGrammar
 from utils.length_model import PoissonModel
@@ -35,8 +35,7 @@ def decode(queue, log_probs, decoder, index2label, result_root):
 @click.argument('result-root', type=str)
 @click.argument('split', type=int)
 @click.option('--seed', type=int, default=0)
-@click.option('--feat-window-size', type=int, default=21)
-def main(data_root, result_root, split, seed, feat_window_size):
+def main(data_root, result_root, split, seed):
     result_root += "-s-%d-%d" % (split, seed)
 
     ### read label2index mapping and index2label mapping ###########################
@@ -59,7 +58,7 @@ def main(data_root, result_root, split, seed, feat_window_size):
     log_prior = np.log( np.loadtxt('%s/prior.iter-' % result_root + str(load_iteration) + '.txt') )
     grammar = PathGrammar('%s/grammar.txt' % result_root, label2index)
     length_model = PoissonModel('%s/lengths.iter-' % result_root + str(load_iteration) + '.txt', max_length = 2000)
-    forwarder = Forwarder(dataset.input_dimension, dataset.n_classes, feat_window_size=feat_window_size)
+    forwarder = Forwarder(dataset.input_dimension, dataset.n_classes)
     forwarder.load_model('%s/network.iter-' % result_root + str(load_iteration) + '.net')
 
     # parallelization

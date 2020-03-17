@@ -10,6 +10,7 @@ from utils.length_model import PoissonModel
 from utils.viterbi import Viterbi
 import click
 import os
+from datetime import datetime
 
 NUM_ITERS = 10000
 
@@ -20,6 +21,7 @@ def decode(queue, log_probs, decoder, index2label, result_root):
             video = queue.get(timeout = 3)
             score, labels, segments = decoder.decode( log_probs[video] )
             # save result
+            print(video)
             with open('%s/' % result_root + video, 'w') as f:
                 f.write( '### Recognized sequence: ###\n' )
                 f.write( ' '.join( [index2label[s.label] for s in segments] ) + '\n' )
@@ -35,8 +37,7 @@ def decode(queue, log_probs, decoder, index2label, result_root):
 @click.argument('result-root', type=str)
 @click.argument('split', type=int)
 @click.option('--seed', type=int, default=0)
-@click.option('--feat-window-size', type=int, default=21)
-def main(data_root, result_root, split, seed, feat_window_size):
+def main(data_root, result_root, split, seed):
     result_root += "-s-%d-%d" % (split, seed)
 
     ### read label2index mapping and index2label mapping ###########################
@@ -59,11 +60,14 @@ def main(data_root, result_root, split, seed, feat_window_size):
     log_prior = np.log( np.loadtxt('%s/prior.iter-' % result_root + str(load_iteration) + '.txt') )
     grammar = PathGrammar('%s/grammar.txt' % result_root, label2index)
     length_model = PoissonModel('%s/lengths.iter-' % result_root + str(load_iteration) + '.txt', max_length = 2000)
-    forwarder = Forwarder(dataset.input_dimension, dataset.n_classes, feat_window_size=feat_window_size)
+    forwarder = Forwarder(dataset.input_dimension, dataset.n_classes)
     forwarder.load_model('%s/network.iter-' % result_root + str(load_iteration) + '.net')
 
     # parallelization
-    n_threads = 4
+    n_threads = 1
+
+    print("Starting ....")
+    tic = datetime.now()
 
     # Viterbi decoder
     viterbi_decoder = Viterbi(grammar, length_model, frame_sampling = 30, max_hypotheses = np.inf)
@@ -82,8 +86,13 @@ def main(data_root, result_root, split, seed, feat_window_size):
         p = mp.Process(target = decode, args = (queue, log_probs, viterbi_decoder, index2label, result_root))
         procs.append(p)
         p.start()
-    for p in procs:
+    for i, p in enumerate(procs):
         p.join()
+
+    toc = datetime.now()
+    duration = (toc - tic).seconds
+    print("On average ----------------------------")
+    print(duration / 252)
 
 
 if __name__ == '__main__':

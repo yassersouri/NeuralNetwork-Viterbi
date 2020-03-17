@@ -3,7 +3,7 @@
 import numpy as np
 import multiprocessing as mp
 import queue
-from utils.dataset import Dataset
+from utils.dataset_i3d_pca import Dataset
 from utils.network import Forwarder
 from utils.grammar import PathGrammar
 from utils.length_model import PoissonModel
@@ -36,7 +36,8 @@ def decode(queue, log_probs, decoder, index2label, result_root):
 @click.argument('split', type=int)
 @click.option('--seed', type=int, default=0)
 @click.option('--feat-window-size', type=int, default=21)
-def main(data_root, result_root, split, seed, feat_window_size):
+@click.option('--no-prior', type=bool, default=False)
+def main(data_root, result_root, split, seed, feat_window_size, no_prior):
     result_root += "-s-%d-%d" % (split, seed)
 
     ### read label2index mapping and index2label mapping ###########################
@@ -74,7 +75,10 @@ def main(data_root, result_root, split, seed, feat_window_size):
         sequence, _ = data
         video = list(dataset.features.keys())[i]
         queue.put(video)
-        log_probs[video] = forwarder.forward(sequence) - log_prior
+        if not no_prior:
+            log_probs[video] = forwarder.forward(sequence) - log_prior
+        else:
+            log_probs[video] = forwarder.forward(sequence)
         log_probs[video] = log_probs[video] - np.max(log_probs[video])
     # Viterbi decoding
     procs = []

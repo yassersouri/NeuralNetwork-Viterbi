@@ -27,7 +27,7 @@ class Buffer(object):
 
     def add_sequence(self, features, transcript, framelabels):
         if len(self.features) < self.buffer_size:
-            # sequence data 
+            # sequence data
             self.features.append(features)
             self.transcript.append(transcript)
             self.framelabels.append(framelabels)
@@ -110,14 +110,28 @@ class Net(nn.Module):
         output = nn.functional.log_softmax(output, dim=2) # tensor is of shape (batch_size, 1, features)
         return output
 
+class FCNet(nn.Module):  # TODO
+    def __init__(self, input_dim, hidden_size, n_classes):
+        super(Net, self).__init__()
+        self.n_classes = n_classes
+        self.gru = nn.GRU(input_dim, hidden_size, 1, bidirectional = False, batch_first = True)
+        self.fc = nn.Linear(hidden_size, n_classes)
+
+    def forward(self, x):
+        dummy, output = self.gru(x)
+        output = self.fc(output)
+        output = nn.functional.log_softmax(output, dim=2) # tensor is of shape (batch_size, 1, features)
+        return output
+
 
 class Forwarder(object):
 
-    def __init__(self, input_dimension, n_classes):
+    def __init__(self, input_dimension, n_classes, feat_window_size=21):
         self.n_classes = n_classes
         hidden_size = 64
         self.net = Net(input_dimension, hidden_size, n_classes)
         self.net.cuda()
+        self.feat_window_size = feat_window_size
 
     def _forward(self, data_wrapper, batch_size = 512):
         dataloader = torch.utils.data.DataLoader(data_wrapper, batch_size = batch_size, shuffle = False)
@@ -134,7 +148,7 @@ class Forwarder(object):
         return log_probs
 
     def forward(self, sequence, batch_size = 512):
-         data_wrapper = DataWrapper(sequence, window_size = 21)
+         data_wrapper = DataWrapper(sequence, window_size = self.feat_window_size)
          return self._forward(data_wrapper)
 
     def load_model(self, model_file):
@@ -145,14 +159,15 @@ class Forwarder(object):
 
 class Trainer(Forwarder):
 
-    def __init__(self, decoder, input_dimension, n_classes, buffer_size, buffered_frame_ratio = 25):
-        super(Trainer, self).__init__(input_dimension, n_classes)
+    def __init__(self, decoder, input_dimension, n_classes, buffer_size, buffered_frame_ratio = 25, feat_window_size = 21, no_prior = False):
+        super(Trainer, self).__init__(input_dimension, n_classes, feat_window_size)
         self.buffer = Buffer(buffer_size, n_classes)
         self.decoder = decoder
         self.buffered_frame_ratio = buffered_frame_ratio
         self.criterion = nn.NLLLoss()
         self.prior = np.ones((self.n_classes), dtype=np.float32) / self.n_classes
         self.mean_lengths = np.ones((self.n_classes), dtype=np.float32)
+        self.no_prior = no_prior
 
 
     def update_mean_lengths(self):
@@ -179,9 +194,12 @@ class Trainer(Forwarder):
 
 
     def train(self, sequence, transcript, batch_size = 512, learning_rate = 0.1):
-        data_wrapper = DataWrapper(sequence, window_size = 21)
+        data_wrapper = DataWrapper(sequence, window_size = self.feat_window_size)
         # forwarding and Viterbi decoding
-        log_probs = self._forward(data_wrapper) - np.log(self.prior)
+        if not self.no_prior:
+            log_probs = self._forward(data_wrapper) - np.log(self.prior)
+        else:
+            log_probs = self._forward(data_wrapper)
         log_probs = log_probs - np.max(log_probs)
         # define transcript grammar and updated length model
         self.decoder.grammar = SingleTranscriptGrammar(transcript, self.n_classes)
@@ -209,11 +227,12 @@ class Trainer(Forwarder):
             loss = self.criterion(output, target)
             loss.backward()
             optimizer.step()
-            sequence_loss += loss.data[0] * input.shape[0] / len(data_wrapper)
+            sequence_loss += loss.item() * input.shape[0] / len(data_wrapper)
         # add sequence to buffer
         self.buffer.add_sequence(sequence, transcript, labels)
         # update prior and mean lengths
-        self.update_prior()
+        if not self.no_prior:
+            self.update_prior()
         self.update_mean_lengths()
         return sequence_loss
 
@@ -224,4 +243,3 @@ class Trainer(Forwarder):
         self.net.cuda()
         np.savetxt(length_file, self.mean_lengths)
         np.savetxt(prior_file, self.prior)
-
